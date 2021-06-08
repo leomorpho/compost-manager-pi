@@ -13,7 +13,7 @@ format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 LOG_FILE = "logs.csv"
-UPLOAD_INTERVAL_SECONDS = 3600
+UPLOAD_INTERVAL_SECONDS = 4
 FIELDS = {
         "timestamp_utc": None,
         "soil_humidity": 1,
@@ -22,8 +22,6 @@ FIELDS = {
         "system_air_temperature": 7, 
         "system_air_heat_index": 9,
         }
-
-repo = git.Repo(os.path.dirname(os.path.realpath(__file__)))
 
 log_buffer = [] 
 
@@ -36,7 +34,9 @@ def update_log_file(lock, filename):
             log_buffer.append(format_data_row(line))
         if len(log_buffer) > 0:
             # Get lock, write to file, and empty.
-            pass
+            if lock.acquire():
+                write_data_to_file(filename, log_buffer)
+                lock.release()
 
 def format_data_row(line):
     split_data = line.split()
@@ -51,26 +51,33 @@ def format_data_row(line):
     logging.info(data)
     return data
 
-def write_data_to_file(filename):
+def write_data_to_file(filename, log_buffer):
     if not os.path.exists(filename):
         with open(filename, "a") as f:
             writer = csv.writer(f)
             writer.writerow(FIELDS.keys())
     with open(filename, "a") as f:
         writer = csv.writer(f)
-        writer.writerow(data)
+        for data in log_buffer:
+            writer.writerow(data)
 
-def upload_to_cloud(lock, start_time):
+def upload_to_cloud(lock, start_time, repo, filename):
     while True:
         if (time.time() - start_time >= UPLOAD_INTERVAL_SECONDS):
-            pass
+            if lock.acquire():
+                repo.index.add([filename])
+                repo.index.commit("Push data")
+                repo.remotes.origin.push()
+                lock.release()
 
 if __name__ == '__main__':
     # Thead example form https://stackoverflow.com/questions/23100704/running-infinite-loops-using-threads-in-python
     start_time = time.time()
+    repo = git.Repo(os.path.dirname(os.path.realpath(__file__)))
+
     lock = Lock()
     t1 = Thread(target = update_log_file, args=(lock, LOG_FILE))
-    t2 = Thread(target = upload_to_cloud, args=(lock, start_time,))
+    t2 = Thread(target = upload_to_cloud, args=(lock, start_time, repo, LOG_FILE))
     t1.setDaemon(True)
     t2.setDaemon(True)
     t1.start()
