@@ -66,7 +66,7 @@ def upload_to_cloud(lock, start_time, repo, filename):
         if (time.time() - start_time >= UPLOAD_INTERVAL_SECONDS):
             if lock.acquire():
                 repo.index.add([filename])
-                repo.index.commit("Push data")
+                repo.index.commit("Push data!")
                 repo.remotes.origin.push()
                 lock.release()
 
