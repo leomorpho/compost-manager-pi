@@ -5,15 +5,14 @@ import os
 import logging
 import git
 import time
-from threading import Thread, Lock
-from multiprocessing.dummy import Pool as ThreadPool
+from threading import Thread
 from datetime import datetime, timezone
 
 format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 LOG_FILE = "logs.csv"
-UPLOAD_INTERVAL_SECONDS = 4
+UPLOAD_INTERVAL_SECONDS = 3600
 FIELDS = {
         "timestamp_utc": None,
         "soil_humidity": 1,
@@ -23,20 +22,15 @@ FIELDS = {
         "system_air_heat_index": 9,
         }
 
-log_buffer = [] 
 
-def update_log_file(lock, filename):
+def update_log_file(filename):
     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     ser.flush()
     while True:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
-            log_buffer.append(format_data_row(line))
-        if len(log_buffer) > 0:
-            # Get lock, write to file, and empty.
-            if lock.acquire():
-                write_data_to_file(filename, log_buffer)
-                lock.release()
+            line = format_data_row(line)
+            write_data_to_file(filename, line)
 
 def format_data_row(line):
     split_data = line.split()
@@ -51,33 +45,32 @@ def format_data_row(line):
     logging.info(data)
     return data
 
-def write_data_to_file(filename, log_buffer):
+def write_data_to_file(filename, data):
     if not os.path.exists(filename):
         with open(filename, "a") as f:
             writer = csv.writer(f)
             writer.writerow(FIELDS.keys())
     with open(filename, "a") as f:
         writer = csv.writer(f)
-        for data in log_buffer:
-            writer.writerow(data)
+        writer.writerow(data)
 
-def upload_to_cloud(lock, start_time, repo, filename):
+def upload_to_cloud(repo, filename):
+    start_time = time.time()
     while True:
         if (time.time() - start_time >= UPLOAD_INTERVAL_SECONDS):
-            if lock.acquire():
-                repo.index.add([filename])
-                repo.index.commit("Push data!")
-                repo.remotes.origin.push()
-                lock.release()
+            start_time = time.time()
+            repo.index.add([filename])
+            repo.index.commit("Push data")
+            logging.info("Start pushing data updates to repo...")
+            repo.remotes.origin.push()
+            logging.info("Finished pushing data updates to repo.")
 
 if __name__ == '__main__':
     # Thead example form https://stackoverflow.com/questions/23100704/running-infinite-loops-using-threads-in-python
-    start_time = time.time()
     repo = git.Repo(os.path.dirname(os.path.realpath(__file__)))
 
-    lock = Lock()
-    t1 = Thread(target = update_log_file, args=(lock, LOG_FILE))
-    t2 = Thread(target = upload_to_cloud, args=(lock, start_time, repo, LOG_FILE))
+    t1 = Thread(target = update_log_file, args=(LOG_FILE,))
+    t2 = Thread(target = upload_to_cloud, args=(repo, LOG_FILE,))
     t1.setDaemon(True)
     t2.setDaemon(True)
     t1.start()
