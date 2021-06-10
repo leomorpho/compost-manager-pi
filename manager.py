@@ -8,58 +8,145 @@ import time
 from threading import Thread
 from datetime import datetime, timezone
 
-format = "%(asctime)s: %(message)s"
+format = "%(asctime)s: %(levelname)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
-LOG_FILE = "logs.csv"
+DATA_FOLDER = "data"
+SENSOR_DATA_FILEPATH = DATA_FOLDER + "sensor_data.csv"
+EFFECTOR_DATA_FILEPATH = DATA_FOLDER + "effector_data.csv"
+LOG_FILEPATH = DATA_FOLDER + "log.csv"
+
 UPLOAD_INTERVAL_SECONDS = 3600
-FIELDS = {
-        "timestamp_utc": None,
-        "soil_humidity": 1,
-        "soil_temperature": 3, 
-        "system_air_humidity": 5, 
-        "system_air_temperature": 7, 
-        "system_air_heat_index": 9,
+SENSOR_FIELDS = {
+            "timestamp_utc": None,
+            "soil_humidity": 1,
+            "soil_temperature": 3, 
+            "system_air_humidity": 5, 
+            "system_air_temperature": 7, 
+            "system_air_heat_index": 9,
         }
 
+HEADER_SENSOR_DATA = "i"
 
-def update_log_file(filename):
+FILES = {HEADER_SENSOR_DATA: SENSOR_DATA_FILEPATH}
+
+WATER_PUMP_ON_INTERVAL = 2
+BLOWER_ON_INTERVAL = 10
+BLOWER_OFF_INTERVAL = 3600
+VALVE_BUFFER_INTERVAL = 5
+RADIATOR_VALVE_ON_INTERVAL = BLOWER_ON_INTERVAL + VALVE_BUFFER_INTERVAL
+
+
+class Effector():
+    def __init__(self, is_on=False, prev_time=None, 
+            on_interval=None, off_interval=None):
+        # Current state is the inverse of the last state
+        self.is_on: bool = False
+        self.prev_time: datetime = prev_time 
+        self.on_interval: int = on_interval
+        self.off_interval: int = off_interval
+
+
+class Effectors():
+    def __init__(self, water_pump, blower, radiator_valve, air_renew_valve):
+        self.water_pump: Effector = water_pump
+        self.blower: Effector = blower
+        self.radiator_valve: Effector = radiator_valve
+        self.air_renew_valve: Effector = air_renew_valve
+
+
+class Sensors():
+    def __init__(self):
+        self.air_hum = None
+        self.air_temp = None
+        self.air_o2 = None
+        self.soil_hum = None
+        self.soil_temp = None
+
+
+def handle_serial_in(files: dict, effectors: Effectors):
+    """Reads serial data and writes it to disk.
+    """
     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     ser.flush()
     while True:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
-            line = format_data_row(line)
-            write_data_to_file(filename, line)
+            logging.info(line)
+            handle_msg(line, files)
 
-def format_data_row(line):
+def handle_msg(msg, files):
+    """Parses serial messages, updates effectors, and writes to disk if needed.
+    """
+    sensors = Sensors()
+
+    header = msg[0]
+    line = ""
+    if msg[0] == HEADER_SENSOR_DATA:
+        # This is sensor data
+        line = format_sensor_data_row(msg[1:])
+    else:
+        logging.error(f"data message cannot be read, header unsupported: '{msg}'")
+        return
+
+    create_file_if_not_exist(header, files[header])
+    write_data_to_file(files[header], line)
+
+
+
+def format_sensor_data_row(line) -> str:
+    """Format a serial sensor data message.
+    """
     split_data = line.split()
     data = []
     data.append(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
-    data.append(split_data[FIELDS["soil_humidity"]][:-1])
-    data.append(split_data[FIELDS["soil_temperature"]][:-2])
-    data.append(split_data[FIELDS["system_air_humidity"]][:-1])
-    data.append(split_data[FIELDS["system_air_temperature"]][:-2])
-    data.append(split_data[FIELDS["system_air_heat_index"]][:-2])
+    data.append(split_data[SENSOR_FIELDS["soil_humidity"]][:-1])
+    data.append(split_data[SENSOR_FIELDS["soil_temperature"]][:-2])
+    data.append(split_data[SENSOR_FIELDS["system_air_humidity"]][:-1])
+    data.append(split_data[SENSOR_FIELDS["system_air_temperature"]][:-2])
+    data.append(split_data[SENSOR_FIELDS["system_air_heat_index"]][:-2])
 
-    logging.info(data)
     return data
 
-def write_data_to_file(filename, data):
-    if not os.path.exists(filename):
-        with open(filename, "a") as f:
-            writer = csv.writer(f)
-            writer.writerow(FIELDS.keys())
+def format_effector_data_row(line) -> str:
+    """Format a serial effector data message.
+    """
+    return ""
+
+def format_log_data_row(line) -> str:
+    """Format a serial log data message.
+    """
+    return ""
+
+def create_file_if_not_exist(header: str, filename: str):
+    if os.path.exists(filename):
+        return
+    column_names = []
+    if header == HEADER_SENSOR_DATA:
+        column_names = SENSOR_FIELDS.values()
+    elif header == HEADER_EFFECTOR_DATA:
+        pass # TODO
+    elif header == HEADER_LOG_DATA:
+        pass # TODO
+    else:
+        logging.error("cannot write to file, header unsupported")
+        return
     with open(filename, "a") as f:
         writer = csv.writer(f)
-        writer.writerow(data)
+        writer.writerow(column_names)
 
-def upload_to_cloud(repo, filename):
+
+def write_data_to_file(filename: str, line: str):
+    with open(filename, "a") as f:
+        writer = csv.writer(f)
+        writer.writerow(line)
+
+def upload_changes_to_cloud(repo, files: dict):
     start_time = time.time()
     while True:
         if (time.time() - start_time >= UPLOAD_INTERVAL_SECONDS):
             start_time = time.time()
-            repo.index.add([filename])
+            repo.index.add([files.keys()])
             repo.index.commit("Push data")
             logging.info("Start pushing data updates to repo...")
             repo.remotes.origin.push()
@@ -69,8 +156,15 @@ if __name__ == '__main__':
     # Thead example form https://stackoverflow.com/questions/23100704/running-infinite-loops-using-threads-in-python
     repo = git.Repo(os.path.dirname(os.path.realpath(__file__)))
 
-    t1 = Thread(target = update_log_file, args=(LOG_FILE,))
-    t2 = Thread(target = upload_to_cloud, args=(repo, LOG_FILE,))
+    water_pump = Effector(on_interval=WATER_PUMP_ON_INTERVAL)
+    blower = Effector(on_interval=BLOWER_ON_INTERVAL, off_interval=BLOWER_OFF_INTERVAL)
+    radiator_valve = Effector(on_interval=RADIATOR_VALVE_ON_INTERVAL)
+    air_renew_valve = Effector(on_interval=BLOWER_ON_INTERVAL)
+
+    effectors = Effectors(water_pump, blower, radiator_valve, air_renew_valve)
+    
+    t1 = Thread(target = handle_serial_in, args=(FILES, effectors))
+    t2 = Thread(target = upload_changes_to_cloud, args=(repo, FILES,))
     t1.setDaemon(True)
     t2.setDaemon(True)
     t1.start()
