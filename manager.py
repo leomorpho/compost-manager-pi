@@ -12,9 +12,7 @@ format = "%(asctime)s: %(levelname)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 DATA_FOLDER = "data"
-SENSOR_DATA_FILEPATH = DATA_FOLDER + "sensor_data.csv"
-EFFECTOR_DATA_FILEPATH = DATA_FOLDER + "effector_data.csv"
-LOG_FILEPATH = DATA_FOLDER + "log.csv"
+SENSOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "sensor_data.csv")
 
 UPLOAD_INTERVAL_SECONDS = 3600
 SENSOR_FIELDS = {
@@ -23,7 +21,6 @@ SENSOR_FIELDS = {
             "soil_temperature": 3, 
             "system_air_humidity": 5, 
             "system_air_temperature": 7, 
-            "system_air_heat_index": 9,
         }
 
 HEADER_SENSOR_DATA = "i"
@@ -56,12 +53,29 @@ class Effectors():
 
 
 class Sensors():
-    def __init__(self):
-        self.air_hum = None
-        self.air_temp = None
-        self.air_o2 = None
-        self.soil_hum = None
-        self.soil_temp = None
+    def __init__(self, raw_line: str = None):
+        if raw_line:
+            split_data = raw_line.split()
+            self.current_time = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+            self.air_hum = split_data[SENSOR_FIELDS["system_air_humidity"]][:-1]
+            self.air_temp = split_data[SENSOR_FIELDS["system_air_temperature"]][:-2]
+            self.soil_hum = split_data[SENSOR_FIELDS["soil_humidity"]][:-1]
+            self.soil_temp = split_data[SENSOR_FIELDS["soil_temperature"]][:-2]
+        else:
+            self.air_hum = None
+            self.air_temp = None
+            self.soil_hum = None
+            self.soil_temp = None
+
+    def to_list(self):
+        l = list()
+        l.append(self.current_time)
+        l.append(self.soil_hum)
+        l.append(self.soil_temp)
+        l.append(self.air_hum)
+        l.append(self.air_temp)
+        return l
+
 
 
 def handle_serial_in(files: dict, effectors: Effectors):
@@ -84,27 +98,19 @@ def handle_msg(msg, files):
     line = ""
     if msg[0] == HEADER_SENSOR_DATA:
         # This is sensor data
-        line = format_sensor_data_row(msg[1:])
+        sensors = Sensors(msg[1:])
     else:
         logging.error(f"data message cannot be read, header unsupported: '{msg}'")
         return
 
     create_file_if_not_exist(header, files[header])
-    write_data_to_file(files[header], line)
+    write_data_to_file(files[header], sensors.to_list())
 
 
 
 def format_sensor_data_row(line) -> str:
     """Format a serial sensor data message.
     """
-    split_data = line.split()
-    data = []
-    data.append(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
-    data.append(split_data[SENSOR_FIELDS["soil_humidity"]][:-1])
-    data.append(split_data[SENSOR_FIELDS["soil_temperature"]][:-2])
-    data.append(split_data[SENSOR_FIELDS["system_air_humidity"]][:-1])
-    data.append(split_data[SENSOR_FIELDS["system_air_temperature"]][:-2])
-    data.append(split_data[SENSOR_FIELDS["system_air_heat_index"]][:-2])
 
     return data
 
@@ -121,16 +127,7 @@ def format_log_data_row(line) -> str:
 def create_file_if_not_exist(header: str, filename: str):
     if os.path.exists(filename):
         return
-    column_names = []
-    if header == HEADER_SENSOR_DATA:
-        column_names = SENSOR_FIELDS.values()
-    elif header == HEADER_EFFECTOR_DATA:
-        pass # TODO
-    elif header == HEADER_LOG_DATA:
-        pass # TODO
-    else:
-        logging.error("cannot write to file, header unsupported")
-        return
+    column_names = SENSOR_FIELDS.values()
     with open(filename, "a") as f:
         writer = csv.writer(f)
         writer.writerow(column_names)
