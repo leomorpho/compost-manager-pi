@@ -64,40 +64,73 @@ state_list = [
         name = "nominal",
         air_hum = 40,
         air_temp = 22,
-        soil_hum = 40,
-        soil_temp = 50,
+        soil_hum = SOIL_H2O_MIN,
+        soil_temp = MAX_SOIL_TEMP_C - 10,
         blower_state_1 = False,
         water_pump_state_1 = False,
         radiator_valve_state_1 = False,
         air_renew_valve_state_1 = False,
-        expected_handshakes = set()
+        expected_handshakes = []
         
     ),
-    # State(
-    #     name = "soil temp too high",
-    #     air_hum = 40,
-    #     air_temp = 22,
-    #     soil_hum = 40,
-    #     soil_temp = MAX_SOIL_TEMP_C + 1,
-    #     blower_state_1 = False,
-    #     blower_state_2 = True,
-    #     water_pump_state_1 = False,
-    #     water_pump_state_2 = False,
-    #     radiator_valve_state_1 = False,
-    #     radiator_valve_state_2 = True,
-    #     air_renew_valve_state_1 = False,
-    #     air_renew_valve_state_2 = False
-    # )
+    State(
+        name = "soil temp too high",
+        air_hum = 40,
+        air_temp = 22,
+        soil_hum = SOIL_H2O_MIN,
+        soil_temp = MAX_SOIL_TEMP_C + 1,
+        blower_state_1 = False,
+        water_pump_state_1 = False,
+        radiator_valve_state_1 = False,
+        air_renew_valve_state_1 = False,
+        expected_handshakes= [RADIATOR_ON_MSG, BLOWER_ON_MSG]
+    ),
+    State(
+        name = "soil temp too high, blower already on",
+        air_hum = 40,
+        air_temp = 22,
+        soil_hum = SOIL_H2O_MIN,
+        soil_temp = MAX_SOIL_TEMP_C + 1,
+        blower_state_1 = True,
+        water_pump_state_1 = False,
+        radiator_valve_state_1 = False,
+        air_renew_valve_state_1 = False,
+        expected_handshakes= [RADIATOR_ON_MSG]
+    ),
+    State(
+        name = "soil humidity too high",
+        air_hum = 40,
+        air_temp = 22,
+        soil_hum = SOIL_H2O_MAX + 1,
+        soil_temp = MAX_SOIL_TEMP_C + 1,
+        blower_state_1 = False,
+        water_pump_state_1 = False,
+        radiator_valve_state_1 = False,
+        air_renew_valve_state_1 = False,
+        expected_handshakes= [BLOWER_ON_MSG, BLOWER_ON_MSG]
+    ),
+    State(
+        name = "soil humidity too high with water pump to turn off",
+        air_hum = 40,
+        air_temp = 22,
+        soil_hum = SOIL_H2O_MAX + 1,
+        soil_temp = MAX_SOIL_TEMP_C + 1,
+        blower_state_1 = False,
+        water_pump_state_1 = True,
+        radiator_valve_state_1 = False,
+        air_renew_valve_state_1 = False,
+        expected_handshakes= [BLOWER_ON_MSG, WATER_PUMP_OFF_MSG, BLOWER_ON_MSG]
+    )
 ]
 
 @pytest.mark.parametrize("case", state_list)
 def test_state(case):
-    
+    logging.info(case.name)
     # Do not emit any real messages
-    case.effectors.emit_state_change_msg = MagicMock() 
     ser = serial.Serial()
+    ser.write = MagicMock() 
     case.effectors.emit_state_change_msgs(ser, case.sensors)
     
-    assert(len(case.expected_handshakes) == len(case.effectors.expected_handshakes))
     for handshake in case.expected_handshakes:
-        assert(handshake in case.effectors.expected_handshakes)
+        assert(handshake in case.effectors.expected_handshakes.keys())
+    assert(len(case.expected_handshakes) == len(case.effectors.expected_handshakes))

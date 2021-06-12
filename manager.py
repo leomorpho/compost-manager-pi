@@ -86,15 +86,15 @@ class Effectors():
         
         # --------- Radiator -------------
         # Temperature should NEVER go above maximum.
-        if sensors.air_temp >= MAX_SOIL_TEMP_C:
+        if sensors.soil_temp >= MAX_SOIL_TEMP_C:
             if not self.radiator_valve.is_on:
-                # Open radiatior path and close direct path.
+                # Open radiator path and close direct path.
                 logging.info(
                     "temperature high: opening radiator valve and closing shortest path valve")
                 self.emit_state_change_msg(ser, RADIATOR_ON_MSG)
                 
             circulate_air = True
-        elif sensors.air_temp < MAX_SOIL_TEMP_C - TEMP_BUFFER_C and self.radiator_valve.is_on:
+        elif sensors.soil_temp < MAX_SOIL_TEMP_C - TEMP_BUFFER_C and self.radiator_valve.is_on:
             logging.info(
                 "temperature in range: closing radiator valve and opening shortest path valve")
             self.emit_state_change_msg(ser, RADIATOR_OFF_MSG)
