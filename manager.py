@@ -6,7 +6,8 @@ import logging
 import git
 import time
 from threading import Thread
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+from constants import *
 
 format = "%(asctime)s: %(levelname)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
@@ -25,15 +26,6 @@ SENSOR_FIELDS = {
 }
 
 HEADER_SENSOR_DATA = "i"
-
-WATER_PUMP_ON_INTERVAL = timedelta(seconds=2)
-BLOWER_ON_INTERVAL = timedelta(seconds=10)
-BLOWER_OFF_INTERVAL = timedelta(hours=1)
-VALVE_BUFFER_INTERVAL = timedelta(seconds=5)
-AIR_RENEW_ON_INTERVAL = timedelta(minutes=1)
-AIR_RENEW_OFF_INTERVAL = timedelta(hours=8)
-RADIATOR_VALVE_ON_INTERVAL = BLOWER_ON_INTERVAL + VALVE_BUFFER_INTERVAL
-MAX_WAIT_HANDSHAKE = timedelta(seconds=10)
 
 # --- Sensor Values ---
 AIR_O2_MIN = 15     # Minimum O2 % of system air
@@ -208,7 +200,7 @@ class Effectors():
         write_data_to_file(self._file, row_values)
 
 
-class Sensor_Values():
+class SensorValues():
     def __init__(self, file):
         self._file = file
         self.air_O2 = None  # Not implemented, sensor missing
@@ -254,7 +246,7 @@ def manage_serial(effectors: Effectors):
     """
     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     ser.flush()
-    sensor_vals = Sensor_Values(SENSOR_DATA_FILEPATH)
+    sensor_vals = SensorValues(SENSOR_DATA_FILEPATH)
     while True:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
