@@ -27,25 +27,6 @@ SENSOR_FIELDS = {
 
 HEADER_SENSOR_DATA = "i"
 
-# --- Sensor Values ---
-AIR_O2_MIN = 15     # Minimum O2 % of system air
-AIR_O2_NORM = 18    # Normal O2 % of system air
-MAX_TEMP_C = 60     # Max temperature allowed during thermophilic composting phase
-TEMP_BUFFER_C = 5
-SOIL_H2O_MAX = 60   # Max % humidity in soil
-SOIL_H2O_NORM = 50  # Normal % humidity in soil
-SOIL_H2O_MIN = 45   # Minimum % humidity in soil
-
-# Serial out messages
-BLOWER_ON_MSG = 'a'.encode()
-BLOWER_OFF_MSG = 'b'.encode()
-RADIATOR_ON_MSG = 'c'.encode()
-RADIATOR_OFF_MSG = 'd'.encode()
-AIR_RENEW_ON_MSG = 'e'.encode()
-AIR_RENEW_OFF_MSG = 'f'.encode()
-WATER_PUMP_ON_MSG = 'g'.encode()
-WATER_PUMP_OFF_MSG = 'h'.encode()
-
 class Handshake():
     def __init__(self, timestamp, out_msg):
         self.timestamp = timestamp
@@ -105,7 +86,7 @@ class Effectors():
         
         # --------- Radiator -------------
         # Temperature should NEVER go above maximum.
-        if sensors.air_temp >= MAX_TEMP_C:
+        if sensors.air_temp >= MAX_SOIL_TEMP_C:
             if not self.radiator_valve.is_on:
                 # Open radiatior path and close direct path.
                 logging.info(
@@ -113,7 +94,7 @@ class Effectors():
                 self.emit_state_change_msg(ser, RADIATOR_ON_MSG)
                 
             circulate_air = True
-        elif sensors.air_temp < MAX_TEMP_C - TEMP_BUFFER_C and self.radiator_valve.is_on:
+        elif sensors.air_temp < MAX_SOIL_TEMP_C - TEMP_BUFFER_C and self.radiator_valve.is_on:
             logging.info(
                 "temperature in range: closing radiator valve and opening shortest path valve")
             self.emit_state_change_msg(ser, RADIATOR_OFF_MSG)

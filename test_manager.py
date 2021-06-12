@@ -11,20 +11,18 @@ log.setLevel(logging.DEBUG)
 
 class State():
     def __init__(self, name,
-                 air_hum, air_temp, soil_hum, soil_temp,
-                 blower_state_1, blower_state_2,
-                 water_pump_state_1, water_pump_state_2,
-                 radiator_valve_state_1, radiator_valve_state_2,
-                 air_renew_valve_state_1, air_renew_valve_state_2):
+                 air_hum, air_temp, 
+                 soil_hum, soil_temp,
+                 blower_state_1,
+                 water_pump_state_1,
+                 radiator_valve_state_1, 
+                 air_renew_valve_state_1,
+                 expected_handshakes):
         self.name = name,
         self.air_hum = air_hum,
         self.air_temp = air_temp,
         self.soil_hum = soil_hum,
         self.soil_temp = soil_temp
-        self.blower_state_2 = blower_state_2
-        self.water_pump_state_2 = water_pump_state_2
-        self.radiator_valve_state_2 = radiator_valve_state_2
-        self.air_renew_valve_state_2 = air_renew_valve_state_2
         
         self.sensors = SensorValues("file")
         self.sensors.air_hum = air_hum
@@ -32,6 +30,8 @@ class State():
         self.sensors.soil_hum = soil_hum
         self.sensors.soil_temp = soil_temp
         self.sensors.air_O2 = None
+        
+        self.expected_handshakes = expected_handshakes
     
         self.effectors = Effectors(
             "file",
@@ -67,14 +67,27 @@ state_list = [
         soil_hum = 40,
         soil_temp = 50,
         blower_state_1 = False,
-        blower_state_2 = False,
         water_pump_state_1 = False,
-        water_pump_state_2 = False,
         radiator_valve_state_1 = False,
-        radiator_valve_state_2 = False,
         air_renew_valve_state_1 = False,
-        air_renew_valve_state_2 = False
-    )
+        expected_handshakes = set()
+        
+    ),
+    # State(
+    #     name = "soil temp too high",
+    #     air_hum = 40,
+    #     air_temp = 22,
+    #     soil_hum = 40,
+    #     soil_temp = MAX_SOIL_TEMP_C + 1,
+    #     blower_state_1 = False,
+    #     blower_state_2 = True,
+    #     water_pump_state_1 = False,
+    #     water_pump_state_2 = False,
+    #     radiator_valve_state_1 = False,
+    #     radiator_valve_state_2 = True,
+    #     air_renew_valve_state_1 = False,
+    #     air_renew_valve_state_2 = False
+    # )
 ]
 
 @pytest.mark.parametrize("case", state_list)
@@ -85,7 +98,6 @@ def test_state(case):
     ser = serial.Serial()
     case.effectors.emit_state_change_msgs(ser, case.sensors)
     
-    assert(case.effectors.water_pump.is_on == case.water_pump_state_2)
-    assert(case.effectors.blower.is_on == case.blower_state_2)
-    assert(case.effectors.water_pump.is_on == case.water_pump_state_2)
-    assert(case.effectors.air_renew_valve.is_on == case.air_renew_valve_state_2)
+    assert(len(case.expected_handshakes) == len(case.effectors.expected_handshakes))
+    for handshake in case.expected_handshakes:
+        assert(handshake in case.effectors.expected_handshakes)
