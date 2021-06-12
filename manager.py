@@ -26,6 +26,7 @@ SENSOR_FIELDS = {
 }
 
 HEADER_SENSOR_DATA = "i"
+HEADER_LOG_DATA = "j"
 
 class Handshake():
     def __init__(self, timestamp, out_msg):
@@ -228,26 +229,40 @@ def manage_serial(effectors: Effectors):
     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     ser.flush()
     sensor_vals = SensorValues(SENSOR_DATA_FILEPATH)
+    ser.write("j".encode())
     while True:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
-            handle_msg(line, sensor_vals, effectors)
-            sensor_vals.persist_to_file()
-            sensor_vals.log_to_console()
-            effectors.emit_state_change_msgs(ser, sensor_vals)
-            effectors.persist_to_file()
+            logging.debug(line)
+            new_info = handle_msg(line, sensor_vals, effectors)
+            if new_info:
+                sensor_vals.persist_to_file()
+                sensor_vals.log_to_console()
+                effectors.emit_state_change_msgs(ser, sensor_vals)
+                effectors.persist_to_file()
             
 
-def handle_msg(msg, sensors, effectors):
+def handle_msg(msg, sensors, effectors) -> bool:
     """Parses serial messages, updates effectors, and writes to disk if needed.
+    Return true if new information is acquired.
     """
-    if msg[0] == HEADER_SENSOR_DATA:
+    if not msg:
+        return False
+    elif msg[0] == HEADER_SENSOR_DATA:
         # This is sensor data
         sensors.update_values(msg[1:])
+        return True
+    elif msg[0] == HEADER_LOG_DATA:
+        logging.info(f"SERIAL IN: {msg[1:].strip()}")
+        return False
     elif msg[0].encode() in effectors.expected_handshakes.keys():
         effectors.handshake_received(msg[0].encode())
+        return True
+    elif msg[0].encode() in ALL_MSG:
+        logging.warn(f"expired handshake {msg[0].encode()} received but not accepted")
     else:
         logging.error(f"data message cannot be read, header '{msg}' unsupported.")
+        return False
             
 def create_file_if_not_exist(filename: str, column_names):
     if os.path.exists(filename):
