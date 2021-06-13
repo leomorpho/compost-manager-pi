@@ -12,6 +12,10 @@ from constants import *
 format = "%(asctime)s: %(levelname)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
+# Runtime values
+TEST_ALL_SYSTEMS = False
+UPDATE_EFFECTORS_STATES = True
+
 DATA_FOLDER = "data"
 SENSOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "sensor_values.csv")
 EFFECTOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "effector_states.csv")
@@ -53,8 +57,11 @@ class Effectors():
         self.expected_handshakes = dict()
 
 
-    def emit_state_change_msg(self, ser: serial.Serial, msg: str):
+    def update_state(self, ser: serial.Serial, msg: str, effector: Effector = None):
         if msg not in self.expected_handshakes:
+            if effector:
+                # If turning effector on, update prev time
+                effector.prev_time = datetime.now()
             ser.write(msg)
             self.expected_handshakes[msg] = (Handshake(datetime.now(), msg))   
         elif datetime.now() - self.expected_handshakes[msg].timestamp >= MAX_WAIT_HANDSHAKE:
@@ -76,68 +83,86 @@ class Effectors():
                         not self.air_renew_valve.is_on:
                 
                 logging.info("opening air renewal valve on set schedule")
-                self.emit_state_change_msg(ser, AIR_RENEW_ON_MSG)
+                self.update_state(ser, AIR_RENEW_ON_MSG, self.water_pump)
                 circulate_air = True
                 
             elif datetime.now() - self.air_renew_valve.prev_time >= \
                         self.air_renew_valve.on_interval and self.air_renew_valve.is_on:
                             
                 logging.info("closing air renewal valve on set schedule")
-                self.emit_state_change_msg(ser, AIR_RENEW_OFF_MSG)
+                self.update_state(ser, AIR_RENEW_OFF_MSG)
         
         # --------- Radiator -------------
         # Temperature should NEVER go above maximum.
-        if sensors.soil_temp >= MAX_SOIL_TEMP_C:
+        if sensors.soil_temp >= SOIL_TEMP_MAX:
             if not self.radiator_valve.is_on:
                 # Open radiator path and close direct path.
                 logging.info(
                     "temperature high: opening radiator valve and closing shortest path valve")
-                self.emit_state_change_msg(ser, RADIATOR_ON_MSG)
+                self.update_state(ser, RADIATOR_ON_MSG, self.water_pump)
                 
             circulate_air = True
-        elif sensors.soil_temp < MAX_SOIL_TEMP_C - TEMP_BUFFER_C and self.radiator_valve.is_on:
+        elif sensors.soil_temp < SOIL_TEMP_MAX - TEMP_BUFFER_C and self.radiator_valve.is_on:
             logging.info(
                 "temperature in range: closing radiator valve and opening shortest path valve")
-            self.emit_state_change_msg(ser, RADIATOR_OFF_MSG)
+            self.update_state(ser, RADIATOR_OFF_MSG)
         
-        # --------- Humidity -------------
+        # --------- Soil Humidity -------------
         if sensors.soil_hum >= SOIL_H2O_MAX:
+            circulate_air = True
             if self.water_pump.is_on:
-                logging.info("soil humidity high: aerating for evaporation")
-                self.emit_state_change_msg(ser, WATER_PUMP_OFF_MSG)
-                circulate_air = True
-        elif sensors.soil_hum < SOIL_H2O_MIN:
+                logging.info("soil humidity high: stop pump")
+                self.update_state(ser, WATER_PUMP_OFF_MSG)
+                
+        # Water may take some time to diffuse through soil and reach the sensor. Do not water until 
+        # normal levels are reached because that will likely mean that one part of the compost will 
+        # be completely drenched.
+        elif sensors.soil_hum < SOIL_H2O_MIN and datetime.now() - self.water_pump.prev_time >= \
+                        self.water_pump.off_interval + self.water_pump.on_interval and \
+                        not self.water_pump.is_on:
             if not self.water_pump.is_on:
-                logging.info("soil humidity low: adding water")
-                self.emit_state_change_msg(ser, WATER_PUMP_ON_MSG)
+                logging.info("soil humidity low, adding water for {self.water_pump.on_interval}")
+                self.update_state(ser, WATER_PUMP_ON_MSG, self.water_pump)
+                
+        elif datetime.now() - self.water_pump.prev_time >= \
+                        self.water_pump.on_interval and self.water_pump.is_on:
+            logging.info(f"stopping water pump for {self.water_pump.off_interval} to give time to the water to diffuse through the soil")
+            self.update_state(ser, WATER_PUMP_OFF_MSG)    
+                    
         elif sensors.soil_hum >= SOIL_H2O_NORM and self.water_pump.is_on:
-            logging.info("soil humidity in range: stop water pump")
-            self.emit_state_change_msg(ser, WATER_PUMP_OFF_MSG)
+            logging.info("soil humidity in range, stop water pump")
+            self.update_state(ser, WATER_PUMP_OFF_MSG)
         
+        # --------- Air Humidity -------------
+        # TODO: current air moisture sensor is for external system environment, not the internal environment!!!
+        if sensors.air_hum > AIR_H2O_MAX and not self.air_renew_valve.is_on:
+            logging.info(f"opening air renewal valve because air humdity is at maximum {sensors.air_hum}%")
+            self.update_state(ser, AIR_RENEW_ON_MSG, self.air_renew_valve)
+            circulate_air = True
+            
         # --------- Circulate air -------------
         if circulate_air:
-            self.blower.prev_time = datetime.now()
             if not self.blower.is_on:
                 logging.info("turning blower on to adjust parameters")
-                self.emit_state_change_msg(ser, BLOWER_ON_MSG)
+                self.update_state(ser, BLOWER_ON_MSG, self.blower)
         elif datetime.now() - self.blower.prev_time >= \
                 BLOWER_ON_INTERVAL + BLOWER_OFF_INTERVAL:
             # Force blower on at a set interval no matter what 
             # parameter updates happened beforehand.
             logging.info("turning blower on for set schedule")
-            self.emit_state_change_msg(ser, BLOWER_ON_MSG)
+            self.update_state(ser, BLOWER_ON_MSG, self.blower)
         elif self.blower.is_on and datetime.now() - \
                                     self.blower.prev_time >= BLOWER_ON_INTERVAL:
             logging.info("turning blower off for set schedule")
-            self.emit_state_change_msg(ser, BLOWER_OFF_MSG)
-    
-    # def verify_handshakes(self):
-    #     for _, handshake in self.expected_handshakes:
-    #         if datetime.now() - handshake.timestamp >= MAX_WAIT_HANDSHAKE:
-    #             logging.error(f"handshake from serial not received for message: {handshake.out_msg}")
-    #             # Remove from expected handshake to retry forever
-    #             self.expected_handshakes.pop(handshake.out_msg)
+            self.update_state(ser, BLOWER_OFF_MSG)
             
+    def turn_off_all(self, ser):
+        logging.info("turning off all effectors to start")
+        self.update_state(ser, BLOWER_OFF_MSG)
+        self.update_state(ser, RADIATOR_OFF_MSG)
+        self.update_state(ser, AIR_RENEW_OFF_MSG)
+        self.update_state(ser, WATER_PUMP_OFF_MSG)
+        
     def handshake_received(self, handshake_msg):
         # TODO: I think it's here that I should update the .is_on and .prev_time attributes
         self.expected_handshakes.pop(handshake_msg)
@@ -186,11 +211,11 @@ class SensorValues():
     def __init__(self, file):
         self._file = file
         self.air_O2 = None  # Not implemented, sensor missing
-        # self.air_hum = None
-        # self.air_temp = None
-        # self.soil_hum = None
-        # self.soil_temp = None
-        # self.current_time = None
+        self.air_hum = None
+        self.air_temp = None
+        self.soil_hum = None
+        self.soil_temp = None
+        self.current_time = None
 
     def update_values(self, raw_line):
         split_data = raw_line.split()
@@ -229,40 +254,41 @@ def manage_serial(effectors: Effectors):
     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     ser.flush()
     sensor_vals = SensorValues(SENSOR_DATA_FILEPATH)
-    ser.write("j".encode())
+    effectors.turn_off_all(ser)
+    if TEST_ALL_SYSTEMS:
+        ser.write(RUN_ALL_EFFECTORS)
+    if not UPDATE_EFFECTORS_STATES:
+        logging.info("read-only mode activated")
+        
     while True:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
             logging.debug(line)
-            new_info = handle_msg(line, sensor_vals, effectors)
-            if new_info:
-                sensor_vals.persist_to_file()
-                sensor_vals.log_to_console()
-                effectors.emit_state_change_msgs(ser, sensor_vals)
-                effectors.persist_to_file()
-            
+            handle_msg(line, sensor_vals, effectors, ser)
 
-def handle_msg(msg, sensors, effectors) -> bool:
+def handle_msg(msg, sensors, effectors, ser):
     """Parses serial messages, updates effectors, and writes to disk if needed.
     Return true if new information is acquired.
     """
     if not msg:
-        return False
+        return 
     elif msg[0] == HEADER_SENSOR_DATA:
         # This is sensor data
         sensors.update_values(msg[1:])
-        return True
+        sensors.persist_to_file()
+        sensors.log_to_console()
+        
+        if UPDATE_EFFECTORS_STATES:
+            effectors.emit_state_change_msgs(ser, sensors)
+            effectors.persist_to_file()
     elif msg[0] == HEADER_LOG_DATA:
         logging.info(f"SERIAL IN: {msg[1:].strip()}")
-        return False
     elif msg[0].encode() in effectors.expected_handshakes.keys():
         effectors.handshake_received(msg[0].encode())
-        return True
     elif msg[0].encode() in ALL_MSG:
         logging.warn(f"expired handshake {msg[0].encode()} received but not accepted")
     else:
         logging.error(f"data message cannot be read, header '{msg}' unsupported.")
-        return False
             
 def create_file_if_not_exist(filename: str, column_names):
     if os.path.exists(filename):
@@ -292,7 +318,7 @@ if __name__ == '__main__':
     # Thead example form https://stackoverflow.com/questions/23100704/running-infinite-loops-using-threads-in-python
     repo = git.Repo(os.path.dirname(os.path.realpath(__file__)))
 
-    water_pump = Effector(on_interval=WATER_PUMP_ON_INTERVAL)
+    water_pump = Effector(on_interval=WATER_PUMP_ON_INTERVAL, off_interval=WATER_PUMP_OFF_INTERVAL)
     blower = Effector(on_interval=BLOWER_ON_INTERVAL, off_interval=BLOWER_OFF_INTERVAL)
     radiator_valve = Effector(on_interval=RADIATOR_VALVE_ON_INTERVAL)
     air_renew_valve = Effector(on_interval=AIR_RENEW_ON_INTERVAL, off_interval=AIR_RENEW_OFF_INTERVAL)

@@ -6,14 +6,16 @@ from datetime import timedelta
 # --- Sensor Values ---
 AIR_O2_MIN = 15     # Minimum O2 % of system air
 AIR_O2_NORM = 18    # Normal O2 % of system air
-MAX_SOIL_TEMP_C = 60     # Max temperature allowed during thermophilic composting phase
+AIR_H2O_MAX = 90
+SOIL_TEMP_MAX = 60  # Max temperature allowed during thermophilic composting phase in ºC
 TEMP_BUFFER_C = 5
 SOIL_H2O_MAX = 60   # Max % humidity in soil
 SOIL_H2O_NORM = 50  # Normal % humidity in soil
 SOIL_H2O_MIN = 45   # Minimum % humidity in soil
 
 # --- Time Intervals ---
-WATER_PUMP_ON_INTERVAL = timedelta(seconds=2)
+WATER_PUMP_ON_INTERVAL = timedelta(seconds=5)
+WATER_PUMP_OFF_INTERVAL = timedelta(minutes=5)
 BLOWER_ON_INTERVAL = timedelta(seconds=10)
 BLOWER_OFF_INTERVAL = timedelta(hours=1)
 VALVE_BUFFER_INTERVAL = timedelta(seconds=5)
@@ -31,6 +33,9 @@ AIR_RENEW_ON_MSG = 'e'.encode()
 AIR_RENEW_OFF_MSG = 'f'.encode()
 WATER_PUMP_ON_MSG = 'g'.encode()
 WATER_PUMP_OFF_MSG = 'h'.encode()
+
+RUN_ALL_EFFECTORS = 'h'.encode()
+# REMINDER: message 'i' cannot be used as it is the sensor info HEADER!
 
 ALL_MSG = {BLOWER_ON_MSG, BLOWER_OFF_MSG, RADIATOR_ON_MSG, RADIATOR_OFF_MSG, 
            AIR_RENEW_ON_MSG, AIR_RENEW_OFF_MSG, WATER_PUMP_ON_MSG, WATER_PUMP_OFF_MSG}
