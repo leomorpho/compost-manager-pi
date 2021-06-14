@@ -16,6 +16,8 @@ logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 TEST_ALL_SYSTEMS = False
 UPDATE_EFFECTORS_STATES = True
 
+IS_SOIL_H2O_SENSOR_ENABLED = True
+
 DATA_FOLDER = "data"
 SENSOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "sensor_values.csv")
 EFFECTOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "effector_states.csv")
@@ -108,7 +110,9 @@ class Effectors():
             self.update_state(ser, RADIATOR_OFF_MSG)
         
         # --------- Soil Humidity -------------
-        if sensors.soil_hum >= SOIL_H2O_MAX:
+        if not IS_SOIL_H2O_SENSOR_ENABLED:
+            pass
+        elif sensors.soil_hum >= SOIL_H2O_MAX:
             circulate_air = True
             if self.water_pump.is_on:
                 logging.info("soil humidity high: stop pump")

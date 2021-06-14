@@ -6,7 +6,7 @@ from datetime import timedelta
 # --- Sensor Values ---
 AIR_O2_MIN = 15     # Minimum O2 % of system air
 AIR_O2_NORM = 18    # Normal O2 % of system air
-AIR_H2O_MAX = 90
+AIR_H2O_MAX = 80
 SOIL_TEMP_MAX = 60  # Max temperature allowed during thermophilic composting phase in ºC
 TEMP_BUFFER_C = 5
 SOIL_H2O_MAX = 60   # Max % humidity in soil
@@ -16,7 +16,7 @@ SOIL_H2O_MIN = 45   # Minimum % humidity in soil
 # --- Time Intervals ---
 WATER_PUMP_ON_INTERVAL = timedelta(seconds=5)
 WATER_PUMP_OFF_INTERVAL = timedelta(minutes=5)
-BLOWER_ON_INTERVAL = timedelta(seconds=10)
+BLOWER_ON_INTERVAL = timedelta(minutes=1)
 BLOWER_OFF_INTERVAL = timedelta(hours=1)
 VALVE_BUFFER_INTERVAL = timedelta(seconds=5)
 AIR_RENEW_ON_INTERVAL = timedelta(minutes=1)
