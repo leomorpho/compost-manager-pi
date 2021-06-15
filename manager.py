@@ -140,7 +140,7 @@ class Effectors():
         # --------- Air Humidity -------------
         # TODO: current air moisture sensor is for external system environment, not the internal environment!!!
         if sensors.air_hum > AIR_H2O_MAX and not self.air_renew_valve.is_on:
-            logging.info(f"opening air renewal valve because air humdity is at maximum {sensors.air_hum}%")
+            logging.info(f"opening air renewal valve because air humidity is at maximum {sensors.air_hum}%")
             self.update_state(ser, AIR_RENEW_ON_MSG, self.air_renew_valve)
             circulate_air = True
             
@@ -240,7 +240,7 @@ class SensorValues():
         return l
     
     def column_names(self):
-        return SENSOR_FIELDS.values()
+        return SENSOR_FIELDS.keys()
     
     def persist_to_file(self):
         create_file_if_not_exist(self._file, self.column_names())
