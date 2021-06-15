@@ -5,6 +5,7 @@ import os
 import logging
 import git
 import time
+import pytz 
 from threading import Thread
 from datetime import datetime, timezone
 from constants import *
@@ -22,7 +23,7 @@ DATA_FOLDER = "data"
 SENSOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "sensor_values.csv")
 EFFECTOR_DATA_FILEPATH = os.path.join(DATA_FOLDER, "effector_states.csv")
 
-UPLOAD_INTERVAL_SECONDS = 3600
+UPLOAD_INTERVAL_SECONDS = 900
 SENSOR_FIELDS = {
     "timestamp_utc": None,
     "soil_humidity": 1,
@@ -145,7 +146,9 @@ class Effectors():
             circulate_air = True
             
         # --------- Circulate air -------------
-        if circulate_air:
+        if current_time_is_at_night():
+            pass
+        elif circulate_air:
             if not self.blower.is_on:
                 logging.info("turning blower on to adjust parameters")
                 self.update_state(ser, BLOWER_ON_MSG, self.blower)
@@ -318,6 +321,13 @@ def upload_changes_to_cloud(repo, files: dict):
             repo.remotes.origin.push()
             logging.info("finished pushing data updates to repo.")
 
+def current_time_is_at_night():
+    tz = pytz.timezone('US/Pacific')
+    now_pt = datetime.now(tz)
+    if now_pt.hour > LOUD_SYSTEM_EARLIEST_HOUR_PT and now_pt.hour < LOUD_SYSTEM_LATEST_HOUR_PT:
+        return False
+    return True
+    
 if __name__ == '__main__':
     # Thead example form https://stackoverflow.com/questions/23100704/running-infinite-loops-using-threads-in-python
     repo = git.Repo(os.path.dirname(os.path.realpath(__file__)))
