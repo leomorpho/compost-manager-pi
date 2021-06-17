@@ -4,12 +4,12 @@ import serial
 from constants import *
 from datetime import datetime
 from unittest.mock import MagicMock
-from manager import Effector, Effectors, SensorValues
+from manager import Effector, EffectorManager, SensorValues
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-class State():
+class TestState():
     def __init__(self, name,
                  air_hum, air_temp, 
                  soil_hum, soil_temp,
@@ -33,93 +33,106 @@ class State():
         
         self.expected_handshakes = expected_handshakes
     
-        self.effectors = Effectors(
+        self.effectors = EffectorManager(
             "file",
             water_pump=Effector(
-                    is_on=water_pump_state_1, 
+                    name="water pump",
+                    curr_state=water_pump_state_1,
                     prev_time=datetime.now(),
-                    on_interval=WATER_PUMP_ON_INTERVAL
+                    on_interval=WATER_PUMP_ON_INTERVAL, 
+                    off_interval=WATER_PUMP_OFF_INTERVAL,
+                    on_msg=WATER_PUMP_ON_MSG,
+                    off_msg=WATER_PUMP_OFF_MSG,
                 ),
             blower=Effector(
-                    is_on=blower_state_1, 
+                    name="blower",
+                    curr_state=blower_state_1,
                     prev_time=datetime.now(),
-                    on_interval=BLOWER_ON_INTERVAL,
+                    on_interval=BLOWER_ON_INTERVAL, 
                     off_interval=BLOWER_OFF_INTERVAL,
+                    on_msg=BLOWER_ON_MSG,
+                    off_msg=BLOWER_OFF_MSG,
                 ),
             radiator_valve=Effector(
-                    is_on=radiator_valve_state_1, 
+                    name="radiator valve",
+                    curr_state=radiator_valve_state_1,
                     prev_time=datetime.now(),
-                    on_interval=RADIATOR_VALVE_ON_INTERVAL
+                    on_interval=RADIATOR_VALVE_ON_INTERVAL,
+                    on_msg=RADIATOR_ON_MSG,
+                    off_msg=RADIATOR_OFF_MSG,
                 ),
             air_renew_valve=Effector(
-                    is_on=air_renew_valve_state_1, 
+                    name="air renewal valve",
+                    curr_state=air_renew_valve_state_1,
                     prev_time=datetime.now(),
-                    on_interval=AIR_RENEW_ON_INTERVAL,
+                    on_interval=AIR_RENEW_ON_INTERVAL, 
                     off_interval=AIR_RENEW_OFF_INTERVAL,
+                    on_msg=AIR_RENEW_ON_MSG,
+                    off_msg=AIR_RENEW_OFF_MSG,
                 ),
             )
         
 state_list = [
-    State(
+    TestState(
         name = "nominal",
         air_hum = 40,
         air_temp = 22,
         soil_hum = SOIL_H2O_MIN,
         soil_temp = SOIL_TEMP_MAX - 10,
-        blower_state_1 = False,
-        water_pump_state_1 = False,
-        radiator_valve_state_1 = False,
-        air_renew_valve_state_1 = False,
+        blower_state_1 = State.OFF,
+        water_pump_state_1 = State.OFF,
+        radiator_valve_state_1 = State.OFF,
+        air_renew_valve_state_1 = State.OFF,
         expected_handshakes = []
         
     ),
-    State(
+    TestState(
         name = "soil temp too high",
         air_hum = 40,
         air_temp = 22,
         soil_hum = SOIL_H2O_MIN,
         soil_temp = SOIL_TEMP_MAX + 1,
-        blower_state_1 = False,
-        water_pump_state_1 = False,
-        radiator_valve_state_1 = False,
-        air_renew_valve_state_1 = False,
+        blower_state_1 = State.OFF,
+        water_pump_state_1 = State.OFF,
+        radiator_valve_state_1 = State.OFF,
+        air_renew_valve_state_1 = State.OFF,
         expected_handshakes= [RADIATOR_ON_MSG, BLOWER_ON_MSG]
     ),
-    State(
+    TestState(
         name = "soil temp too high, blower already on",
         air_hum = 40,
         air_temp = 22,
         soil_hum = SOIL_H2O_MIN,
         soil_temp = SOIL_TEMP_MAX + 1,
-        blower_state_1 = True,
-        water_pump_state_1 = False,
-        radiator_valve_state_1 = False,
-        air_renew_valve_state_1 = False,
+        blower_state_1 = State.ON,
+        water_pump_state_1 = State.OFF,
+        radiator_valve_state_1 = State.OFF,
+        air_renew_valve_state_1 = State.OFF,
         expected_handshakes= [RADIATOR_ON_MSG]
     ),
-    State(
+    TestState(
         name = "soil humidity too high",
         air_hum = 40,
         air_temp = 22,
         soil_hum = SOIL_H2O_MAX + 1,
         soil_temp = SOIL_TEMP_MAX + 1,
-        blower_state_1 = False,
-        water_pump_state_1 = False,
-        radiator_valve_state_1 = False,
-        air_renew_valve_state_1 = False,
-        expected_handshakes= [BLOWER_ON_MSG, BLOWER_ON_MSG]
+        blower_state_1 = State.OFF,
+        water_pump_state_1 = State.OFF,
+        radiator_valve_state_1 = State.OFF,
+        air_renew_valve_state_1 = State.OFF,
+        expected_handshakes= [BLOWER_ON_MSG, RADIATOR_ON_MSG]
     ),
-    State(
+    TestState(
         name = "soil humidity too high with water pump to turn off",
         air_hum = 40,
         air_temp = 22,
         soil_hum = SOIL_H2O_MAX + 1,
         soil_temp = SOIL_TEMP_MAX + 1,
-        blower_state_1 = False,
-        water_pump_state_1 = True,
-        radiator_valve_state_1 = False,
-        air_renew_valve_state_1 = False,
-        expected_handshakes= [BLOWER_ON_MSG, WATER_PUMP_OFF_MSG, BLOWER_ON_MSG]
+        blower_state_1 = State.OFF,
+        water_pump_state_1 = State.ON,
+        radiator_valve_state_1 = State.OFF,
+        air_renew_valve_state_1 = State.OFF,
+        expected_handshakes= [BLOWER_ON_MSG, WATER_PUMP_OFF_MSG, RADIATOR_ON_MSG]
     )
 ]
 
@@ -129,8 +142,14 @@ def test_state(case):
     # Do not emit any real messages
     ser = serial.Serial()
     ser.write = MagicMock() 
-    case.effectors.emit_state_change_msgs(ser, case.sensors)
+    case.effectors.manage(ser, case.sensors)
     
+    for handshake in case.expected_handshakes:
+        logging.info(f"Expected handshake: {MSG_TO_TEXT[handshake]}")
+        
+    for handshake in case.effectors.expected_handshakes.keys():
+        logging.info(f"Received handshake: {MSG_TO_TEXT[handshake]}")
+        
     for handshake in case.expected_handshakes:
         assert(handshake in case.effectors.expected_handshakes.keys())
     assert(len(case.expected_handshakes) == len(case.effectors.expected_handshakes))
