@@ -40,7 +40,7 @@ class Handshake():
     
     def __repr__(self):
         return f"{self.out_msg}"
-        
+  
 class Effector():
     def __init__(self, prev_time=datetime.now(), 
                 curr_state=State.OFF, on_msg=None, off_msg=None,
@@ -94,6 +94,8 @@ class EffectorManager():
         self.blower: Effector = blower
         self.radiator_valve: Effector = radiator_valve
         self.air_renew_valve: Effector = air_renew_valve
+        
+        self.effectors = [self.water_pump, self.blower, self.radiator_valve, self.air_renew_valve]
 
     def update_state(self, ser: serial.Serial, effector: Effector):
         """Update the state of a specific effector.
@@ -223,18 +225,16 @@ class EffectorManager():
             self.blower.toggle_on()
             
         # ----------- Emit all state update messages -------------
-        effectors = [self.water_pump, self.blower, self.radiator_valve, self.air_renew_valve]
-        for e in effectors:
+        for e in self.effectors:
             if e.state_change_occured():
                 self.update_state(ser, e)
   
             
     def turn_off_all(self, ser):
         logging.info("turning off all effectors to start")
-        self.update_state(ser, BLOWER_OFF_MSG)
-        self.update_state(ser, RADIATOR_OFF_MSG)
-        self.update_state(ser, AIR_RENEW_OFF_MSG)
-        self.update_state(ser, WATER_PUMP_OFF_MSG)
+        for e in self.effectors:
+            e.toggle_off()
+            self.update_state(ser, e)
         
     def handshake_received(self, handshake_msg):
         self.expected_handshakes.pop(handshake_msg)
@@ -351,7 +351,7 @@ def handle_msg(msg, sensors, effectors, ser):
         sensors.log_to_console()
         
         if UPDATE_EFFECTORS_STATES:
-            effectors.emit_state_change_msgs(ser, sensors)
+            effectors.manage(ser, sensors)
             effectors.persist_to_file()
     elif msg[0] == HEADER_LOG_DATA:
         logging.info(f"SERIAL IN: {msg[1:].strip()}")
