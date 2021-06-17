@@ -6,7 +6,7 @@ import logging
 import git
 import pytz 
 from threading import Thread
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from constants import *
 
 format = "%(asctime)s: %(levelname)s: %(message)s"
@@ -42,12 +42,13 @@ class Handshake():
         return f"{self.out_msg}"
         
 class Effector():
-    def __init__(self, prev_time=datetime.now(), curr_state=State.OFF, on_msg=None, off_msg=None,
-            on_interval=None, off_interval=None, name=None):
+    def __init__(self, prev_time=datetime.now(), 
+                curr_state=State.OFF, on_msg=None, off_msg=None,
+                on_interval=None, off_interval=None, name=None):
         # Current state is the inverse of the last state
         self.curr_state: bool = curr_state
         self.next_state: State = curr_state
-        self.prev_time: datetime = prev_time 
+        self.prev_time: datetime = prev_time
         self.on_interval: int = on_interval
         self.off_interval: int = off_interval
         self.name: str = name
@@ -72,9 +73,10 @@ class Effector():
         """
         if self.next_state == State.ON: 
             return self.on_msg
-        else: return State.OFF
+        else: 
+            return self.off_msg
         
-    def update_prev_time(self):
+    def update_prev_time_if_needed(self):
         """Update time at which the effector is last turned on
         """
         if self.next_state == State.ON: 
@@ -99,13 +101,13 @@ class EffectorManager():
         if not effector.state_change_occured():
             return
         msg: bytes = effector.get_msg()
-        effector.update_prev_time()
+        effector.update_prev_time_if_needed()
             
         if msg not in self.expected_handshakes:
             # RPi is not waiting for serial to respond to this very same message 
+            logging.info(f"MESSAGE for {effector}: {msg}")
             ser.write(msg)
             self.expected_handshakes[msg] = (Handshake(datetime.now(), msg))  
-            logging.info(self.expected_handshakes) 
         elif datetime.now() - self.expected_handshakes[msg].timestamp >= MAX_WAIT_HANDSHAKE:
             logging.error(f"handshake from serial not received for message: {msg}")
             # Remove from expected handshake to retry forever
@@ -155,7 +157,6 @@ class EffectorManager():
             self.radiator_valve.toggle_on()
             if self.radiator_valve.state_change_occured():
                 # Open radiator path and close direct path.
-                logging.info(f"{self.radiator_valve.curr_state}, {self.radiator_valve.next_state}")
                 logging.info("temperature high: opening radiator valve and closing shortest path valve")
                 
             circulate_air = True
@@ -204,18 +205,18 @@ class EffectorManager():
             self.air_renew_valve.toggle_off()
             pass
         elif need_drying:
-            if datetime.now() - self.blower.prev_time >= DRYING_ON_INTERVAL:
+            if datetime.now() - self.blower.prev_time >= DRYING_ON_INTERVAL and self.blower.curr_state is State.ON:
                 self.blower.toggle_off()
                 self.radiator_valve.toggle_off()
                 if self.blower.state_change_occured():
                     logging.info(f"turning blower off to let it cool down for {DRYING_ON_INTERVAL.seconds / 60} minutes")
             elif datetime.now() - self.blower.prev_time >= \
-                        DRYING_OFF_INTERVAL + DRYING_ON_INTERVAL:
+                        DRYING_OFF_INTERVAL + DRYING_ON_INTERVAL and self.blower.curr_state is State.OFF:
                 self.blower.toggle_on()
                 self.radiator_valve.toggle_on()
                 self.air_renew_valve.toggle_on()
                 if self.blower.state_change_occured():
-                    logging.info("turning blower, radiator and renew valve on to dry compost")   
+                    logging.info("turning blower, radiator and renew valve on to dry compost") 
         elif circulate_air:
             if self.blower.state_change_occured():
                 logging.info("turning blower on to adjust parameters")
@@ -225,7 +226,6 @@ class EffectorManager():
         effectors = [self.water_pump, self.blower, self.radiator_valve, self.air_renew_valve]
         for e in effectors:
             if e.state_change_occured():
-                logging.info(f"State change occured for {e}")
                 self.update_state(ser, e)
   
             

@@ -1,8 +1,9 @@
 import pytest
 import logging
 import serial
+import manager
 from constants import *
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 from manager import Effector, EffectorManager, SensorValues
 
@@ -47,7 +48,7 @@ class TestState():
             blower=Effector(
                     name="blower",
                     curr_state=blower_state_1,
-                    prev_time=datetime.now(),
+                    prev_time=datetime.now() - DRYING_OFF_INTERVAL - DRYING_ON_INTERVAL - timedelta(seconds=1),
                     on_interval=BLOWER_ON_INTERVAL, 
                     off_interval=BLOWER_OFF_INTERVAL,
                     on_msg=BLOWER_ON_MSG,
@@ -115,12 +116,12 @@ state_list = [
         air_hum = 40,
         air_temp = 22,
         soil_hum = SOIL_H2O_MAX + 1,
-        soil_temp = SOIL_TEMP_MAX + 1,
+        soil_temp = 40,
         blower_state_1 = State.OFF,
         water_pump_state_1 = State.OFF,
         radiator_valve_state_1 = State.OFF,
         air_renew_valve_state_1 = State.OFF,
-        expected_handshakes= [BLOWER_ON_MSG, RADIATOR_ON_MSG]
+        expected_handshakes= [BLOWER_ON_MSG, RADIATOR_ON_MSG, AIR_RENEW_ON_MSG]
     ),
     TestState(
         name = "soil humidity too high with water pump to turn off",
@@ -132,7 +133,7 @@ state_list = [
         water_pump_state_1 = State.ON,
         radiator_valve_state_1 = State.OFF,
         air_renew_valve_state_1 = State.OFF,
-        expected_handshakes= [BLOWER_ON_MSG, WATER_PUMP_OFF_MSG, RADIATOR_ON_MSG]
+        expected_handshakes= [BLOWER_ON_MSG, WATER_PUMP_OFF_MSG, RADIATOR_ON_MSG, AIR_RENEW_ON_MSG]
     )
 ]
 
@@ -142,6 +143,7 @@ def test_state(case):
     # Do not emit any real messages
     ser = serial.Serial()
     ser.write = MagicMock() 
+    manager.current_time_is_at_night = MagicMock(return_value=False)
     case.effectors.manage(ser, case.sensors)
     
     for handshake in case.expected_handshakes:
