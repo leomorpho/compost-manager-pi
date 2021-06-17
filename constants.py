@@ -28,7 +28,7 @@ WATER_PUMP_OFF_INTERVAL = timedelta(minutes=5)
 BLOWER_ON_INTERVAL = timedelta(minutes=1)
 BLOWER_OFF_INTERVAL = timedelta(hours=1)
 VALVE_BUFFER_INTERVAL = timedelta(seconds=5)
-AIR_RENEW_ON_INTERVAL = timedelta(minutes=1)
+AIR_RENEW_ON_INTERVAL = timedelta(minutes=2)
 AIR_RENEW_OFF_INTERVAL = timedelta(hours=8)
 RADIATOR_VALVE_ON_INTERVAL = BLOWER_ON_INTERVAL + VALVE_BUFFER_INTERVAL
 MAX_WAIT_HANDSHAKE = timedelta(seconds=10)

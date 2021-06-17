@@ -53,13 +53,7 @@ class Effector():
         self.name: str = name
         self.on_msg: bytes = on_msg
         self.off_msg: bytes = off_msg
-        if prev_time:
-            self.prev_time: datetime = prev_time
-        else:
-            # To turn on effectors immediately if needed, otherwise they will only turn on
-            # the first time when enough time has lapsed that the interval off of the effector
-            # is reached.
-            self.prev_time: datetime = datetime.now() - timedelta(hours=1)
+        self.prev_time: datetime = prev_time
         
     def __repr__(self):
         return f"{self.name}"
@@ -127,7 +121,7 @@ class EffectorManager():
         # --------- Circulate air on Schedule-------------
         if current_time_is_at_night():
             pass
-        elif datetime.now() - self.blower.prev_time >= \
+        elif self.blower.prev_time is None or datetime.now() - self.blower.prev_time >= \
                 BLOWER_ON_INTERVAL + BLOWER_OFF_INTERVAL:
             # Force blower on at a set interval no matter what 
             # parameter updates happened beforehand.
@@ -144,7 +138,7 @@ class EffectorManager():
             pass
         else:
             # Renew air on a set schedule
-            if datetime.now() - self.air_renew_valve.prev_time >= \
+            if self.air_renew_valve.prev_time is None or datetime.now() - self.air_renew_valve.prev_time >= \
                         self.air_renew_valve.off_interval + self.air_renew_valve.on_interval:
                 self.air_renew_valve.toggle_on()
                 if self.air_renew_valve.state_change_occured():
@@ -184,13 +178,16 @@ class EffectorManager():
         # Water may take some time to diffuse through soil and reach the sensor. Do not water until 
         # normal levels are reached because that will likely mean that one part of the compost will 
         # be completely drenched.
-        elif sensors.soil_hum < SOIL_H2O_MIN and datetime.now() - self.water_pump.prev_time >= \
+        elif sensors.soil_hum < SOIL_H2O_MIN:
+            if self.water_pump.prev_time is None:
+                self.water_pump.toggle_on()
+            if datetime.now() - self.water_pump.prev_time >= \
                         self.water_pump.off_interval + self.water_pump.on_interval:
                 self.water_pump.toggle_on()
-                if self.water_pump.state_change_occured():
-                    logging.info("soil humidity low, adding water for {self.water_pump.on_interval}")
+            if self.water_pump.state_change_occured():
+                logging.info("soil humidity low, adding water for {self.water_pump.on_interval}")
                 
-        elif datetime.now() - self.water_pump.prev_time >= self.water_pump.on_interval:
+        elif self.water_pump.prev_time is not None and datetime.now() - self.water_pump.prev_time >= self.water_pump.on_interval:
             self.water_pump.toggle_off()
             if self.water_pump.state_change_occured():
                 logging.info(f"stopping water pump for {self.water_pump.off_interval} to give time to the water to diffuse through the soil")
@@ -209,7 +206,13 @@ class EffectorManager():
             self.radiator_valve.toggle_off()
             self.air_renew_valve.toggle_off()
             pass
+        elif self.blower.prev_time is None:
+            pass
         elif need_drying:
+            logging.info("need drying")
+            if self.blower.prev_time is None:            
+                logging.info("prev time not updated")
+
             if datetime.now() - self.blower.prev_time >= DRYING_ON_INTERVAL and self.blower.curr_state is State.ON:
                 self.blower.toggle_off()
                 self.radiator_valve.toggle_off()
