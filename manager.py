@@ -40,20 +40,26 @@ class Handshake():
     
     def __repr__(self):
         return f"{self.out_msg}"
-  
+
 class Effector():
-    def __init__(self, prev_time=datetime.now(), 
+    def __init__(self, prev_time=None, 
                 curr_state=State.OFF, on_msg=None, off_msg=None,
                 on_interval=None, off_interval=None, name=None):
         # Current state is the inverse of the last state
         self.curr_state: bool = curr_state
         self.next_state: State = curr_state
-        self.prev_time: datetime = prev_time
         self.on_interval: int = on_interval
         self.off_interval: int = off_interval
         self.name: str = name
         self.on_msg: bytes = on_msg
         self.off_msg: bytes = off_msg
+        if prev_time:
+            self.prev_time: datetime = prev_time
+        else:
+            # To turn on effectors immediately if needed, otherwise they will only turn on
+            # the first time when enough time has lapsed that the interval off of the effector
+            # is reached.
+            self.prev_time: datetime = datetime.now() - timedelta(hours=1)
         
     def __repr__(self):
         return f"{self.name}"
@@ -100,14 +106,11 @@ class EffectorManager():
     def update_state(self, ser: serial.Serial, effector: Effector):
         """Update the state of a specific effector.
         """
-        if not effector.state_change_occured():
-            return
         msg: bytes = effector.get_msg()
         effector.update_prev_time_if_needed()
             
         if msg not in self.expected_handshakes:
             # RPi is not waiting for serial to respond to this very same message 
-            logging.info(f"MESSAGE for {effector}: {msg}")
             ser.write(msg)
             self.expected_handshakes[msg] = (Handshake(datetime.now(), msg))  
         elif datetime.now() - self.expected_handshakes[msg].timestamp >= MAX_WAIT_HANDSHAKE:
@@ -133,7 +136,7 @@ class EffectorManager():
         elif self.blower.curr_state and datetime.now() - \
                                     self.blower.prev_time >= BLOWER_ON_INTERVAL:
             logging.info("turning blower off for set schedule")
-            self.blower.toggle_on()
+            self.blower.toggle_off()
         
         # ------------- Air Renew ---------------
         # TODO: Complete when sensor is attached.
@@ -241,28 +244,28 @@ class EffectorManager():
         
         # Update the state of the effectors
         if handshake_msg == BLOWER_ON_MSG:
-            self.blower.curr_state = True
+            self.blower.curr_state = State.ON
             self.blower.prev_time = datetime.now()
         elif handshake_msg == BLOWER_OFF_MSG:
-            self.blower.curr_state = False
+            self.blower.curr_state = State.OFF
             
         elif handshake_msg == RADIATOR_ON_MSG:
-            self.radiator_valve.curr_state = True
+            self.radiator_valve.curr_state = State.ON
             self.radiator_valve.prev_time = datetime.now()
         elif handshake_msg == RADIATOR_OFF_MSG:
-            self.radiator_valve.curr_state = False
+            self.radiator_valve.curr_state = State.OFF
             
         elif handshake_msg == AIR_RENEW_ON_MSG:
-            self.air_renew_valve.curr_state = True
+            self.air_renew_valve.curr_state = State.ON
             self.air_renew_valve.prev_time = datetime.now()
         elif handshake_msg == AIR_RENEW_OFF_MSG:
-            self.air_renew_valve.curr_state = False
+            self.air_renew_valve.curr_state = State.OFF
             
         elif handshake_msg == WATER_PUMP_ON_MSG:
-            self.water_pump.curr_state = True
+            self.water_pump.curr_state = State.ON
             self.water_pump.prev_time = datetime.now()
         elif handshake_msg == WATER_PUMP_OFF_MSG:
-            self.water_pump.curr_state = False
+            self.water_pump.curr_state = State.OFF
         
         logging.info(f"handshake received for the following message: {handshake_msg}")
     
