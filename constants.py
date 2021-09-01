@@ -4,12 +4,14 @@ from enum import Flag
 # A place to put constants needed by testing function
 # Not great, but will do for now.
 
+
 class State(Flag):
     """A C-like enumeration to portray state as a boolean
     """
     ON = True
     OFF = False
-    
+
+
 # --- Sensor Values ---
 AIR_O2_MIN = 15     # Minimum O2 % of system air
 AIR_O2_NORM = 18    # Normal O2 % of system air
@@ -35,7 +37,7 @@ MAX_WAIT_HANDSHAKE = timedelta(seconds=10)
 
 UPLOAD_INTERVAL_SECONDS = timedelta(seconds=900)
 
-# Serial out messages
+# Serial out messages. See 'MSG_TO_TEXT' for explanation.
 BLOWER_ON_MSG = 'a'.encode()
 BLOWER_OFF_MSG = 'b'.encode()
 RADIATOR_ON_MSG = 'c'.encode()
@@ -60,7 +62,7 @@ MSG_TO_TEXT = {
     'j'.encode(): "test all effectors",
 }
 
-ALL_MSG = {BLOWER_ON_MSG, BLOWER_OFF_MSG, RADIATOR_ON_MSG, RADIATOR_OFF_MSG, 
+ALL_MSG = {BLOWER_ON_MSG, BLOWER_OFF_MSG, RADIATOR_ON_MSG, RADIATOR_OFF_MSG,
            AIR_RENEW_ON_MSG, AIR_RENEW_OFF_MSG, WATER_PUMP_ON_MSG, WATER_PUMP_OFF_MSG}
 
 # Times during which loud systems should NOT be turned on
