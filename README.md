@@ -5,12 +5,11 @@ This manager maintains an enclosed compost within predetermined environmental va
 
 The following metrics can be controlled:
 
-
-
 * Soil humidity
 * Air humidity 
 * Soil and air temperature
 * Oxygen concentration
+* Forced aeration
 
 ## Getting Started
 To run, use python3:
